@@ -1,7 +1,19 @@
 "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # For testing only
-import instaloader
+import os
+import re
 from pathlib import Path
+import instaloader
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
+# --- Config ---
+BOT_TOKEN = os.getenv("8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98") or "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
+IG_SESSION_USER = os.getenv("savifyai") or "savifyai"  # sessiya yaratgan username
+
+DOWNLOAD_ROOT = Path("downloads")
+DOWNLOAD_ROOT.mkdir(exist_ok=True)
+
+# --- Instaloader helper ---
 def get_loader():
     L = instaloader.Instaloader(
         download_videos=True,
@@ -11,55 +23,74 @@ def get_loader():
         save_metadata=False,
         post_metadata_txt_pattern=""
     )
-    L.load_session_from_file("savifyai")  # o‘z username’ingizni yozing
+    # Sessiya faylini yuklash
+    L.load_session_from_file(IG_SESSION_USER)
     return L
 
-def download_reel(url: str, target_dir="downloads"):
-    L = get_loader()
-    shortcode = url.strip("/").split("/")[-1]
-    post = instaloader.Post.from_shortcode(L.context, shortcode)
-    L.download_post(post, target=Path(target_dir) / "reel")
+def extract_shortcode(url: str):
+    url = url.strip()
+    patterns = [
+        r"instagram\.com/(?:p|reel|tv)/([A-Za-z0-9_-]+)/?",
+    ]
+    for pat in patterns:
+        m = re.search(pat, url)
+        if m:
+            return m.group(1)
+    return None
 
-def download_profile_posts(username: str, max_count=3, target_dir="downloads"):
+# --- Downloaders ---
+def download_reel_or_post(url: str, target_dir: Path):
     L = get_loader()
-    profile = instaloader.Profile.from_username(L.context, username.strip("@"))
+    shortcode = extract_shortcode(url)
+    if not shortcode:
+        raise ValueError("Link noto‘g‘ri. To‘liq Instagram link yuboring.")
+    post = instaloader.Post.from_shortcode(L.context, shortcode)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    L.download_post(post, target=target_dir)
+
+def download_profile_posts(username: str, max_count=3, target_dir: Path = DOWNLOAD_ROOT):
+    L = get_loader()
+    username = username.strip().lstrip("@")
+    profile = instaloader.Profile.from_username(L.context, username)
+    target_dir = target_dir / username
+    target_dir.mkdir(parents=True, exist_ok=True)
     for idx, post in enumerate(profile.get_posts()):
         if idx >= max_count:
             break
-        L.download_post(post, target=Path(target_dir) / username.strip("@"))
-import os
-from pathlib import Path
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+        L.download_post(post, target=target_dir)
+    return target_dir
 
-BOT_TOKEN = os.getenv("8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"); 
-
+# --- Telegram Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Salom! Menga Instagram link yoki username yuboring.\n"
-        "Men sizga post, reel yoki story’larni yuklab beraman (HD sifatida)."
+        "Men sizga post yoki reel’larni HD sifatida yuklab beraman."
     )
 
 async def handle_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
+    text = (update.message.text or "").strip()
     await update.message.reply_text("⏬ Yuklanmoqda... kuting.")
 
     try:
         if "instagram.com" in text:
-            download_reel(text)
-            target_name = "reel"
+            target_dir = DOWNLOAD_ROOT / "reel_or_post"
+            download_reel_or_post(text, target_dir)
         else:
-            download_profile_posts(text, max_count=3)
-            target_name = text.strip("@")
+            target_dir = download_profile_posts(text, max_count=3)
 
-        download_dir = Path("downloads") / target_name
-        if not download_dir.exists():
-            await update.message.reply_text("❌ Hech narsa topilmadi.")
+        if not target_dir.exists():
+            await update.message.reply_text("❌ Hech narsa yuklanmadi.")
             return
 
-        for file in download_dir.glob("*"):
-            with open(file, "rb") as f:
-                await update.message.reply_document(document=f)
+        files = sorted(target_dir.glob("*"))
+        if not files:
+            await update.message.reply_text("❌ Fayl topilmadi.")
+            return
+
+        for file in files:
+            if file.is_file():
+                with open(file, "rb") as f:
+                    await update.message.reply_document(document=f)
 
         await update.message.reply_text("✅ Tayyor! Fayllar original sifatida yuborildi.")
 
@@ -67,6 +98,7 @@ async def handle_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Xato: {e}")
         print(e)
 
+# --- Main ---
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -76,4 +108,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
