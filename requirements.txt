@@ -1,5 +1,5 @@
-python-telegram-bot==13.15
-yt-dlp==2024.6.18
-requests==2.31.0
-pydub==0.25.1
-python-magic==0.4.27
+python-telegram-bot
+yt-dlp
+requests
+pydub
+python-magic
