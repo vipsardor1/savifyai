@@ -1,3 +1,2 @@
-pyTelegramBotAPI==4.15.4
-yt-dlp==2024.10.7
+pyTelegramBotAPI
 yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git
