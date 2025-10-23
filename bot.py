@@ -1,3 +1,9 @@
+import os
+
+# vaqtinchalik papka yaratish
+if not os.path.exists("/tmp/insta"):
+    os.makedirs("/tmp/insta")
+
 import telebot
 import yt_dlp
 import os
