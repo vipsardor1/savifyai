@@ -1,5 +1,5 @@
-python-telegram-bot
+pyTelegramBotAPI
 yt-dlp
-requests
-pydub
-python-magic
+instaloader
+ffmpeg=python
+
