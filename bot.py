@@ -1,74 +1,47 @@
 import os
 import telebot
-import yt_dlp
 import instaloader
-from shazamio import Shazam
 
-bot = telebot.TeleBot("8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98")
+BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # <-- shu yerga o'z tokeningni yoz
+bot = telebot.TeleBot(BOT_TOKEN)
 
-TMP = "/tmp/media"
-os.makedirs(TMP, exist_ok=True)
+# vaqtinchalik yuklash papkasi
+TMP_DIR = "/tmp/insta"
+os.makedirs(TMP_DIR, exist_ok=True)
 
-@bot.message_handler(commands=['start'])
-def start(msg):
-    bot.reply_to(msg, "🎧 Yuboring: YouTube, TikTok, Instagram, Spotify, yoki Yandex Music link.")
+@bot.message_handler(func=lambda msg: "instagram.com" in msg.text)
+def handle_instagram(msg):
+    url = msg.text.strip()
+    bot.send_message(msg.chat.id, "📸 Yuklanmoqda... kuting...")
 
-@bot.message_handler(func=lambda m: True)
-def handle_message(msg):
-    text = msg.text.strip()
-    if "youtube.com" in text or "youtu.be" in text:
-        download_youtube(msg, text)
-    elif "tiktok.com" in text:
-        download_tiktok(msg, text)
-    elif "instagram.com" in text:
-        download_instagram(msg, text)
-    else:
-        bot.reply_to(msg, "❌ Noma'lum link — faqat YouTube, TikTok, yoki Instagram.")
-
-def download_youtube(msg, url):
-    bot.send_message(msg.chat.id, "📹 YouTube video yuklanmoqda...")
-    path = os.path.join(TMP, "yt.mp4")
-    ydl_opts = {
-        "outtmpl": path,
-        "format": "bestvideo+bestaudio/best",
-        "merge_output_format": "mp4"
-    }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        with open(path, "rb") as v:
-            bot.send_video(msg.chat.id, v)
-        os.remove(path)
-    except Exception as e:
-        bot.send_message(msg.chat.id, f"⚠️ Xato: {e}")
-
-def download_tiktok(msg, url):
-    bot.send_message(msg.chat.id, "🎬 TikTok video yuklanmoqda...")
-    path = os.path.join(TMP, "tt.mp4")
-    ydl_opts = {"outtmpl": path, "format": "best", "merge_output_format": "mp4"}
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        with open(path, "rb") as v:
-            bot.send_video(msg.chat.id, v)
-        os.remove(path)
-    except Exception as e:
-        bot.send_message(msg.chat.id, f"⚠️ Xato: {e}")
-
-def download_instagram(msg, url):
-    bot.send_message(msg.chat.id, "📸 Instagramdan yuklanmoqda...")
-    try:
-        L = instaloader.Instaloader(dirname_pattern=TMP)
+        # Instaloader sozlamalari
+        loader = instaloader.Instaloader(dirname_pattern=TMP_DIR)
         shortcode = url.split("/")[-2]
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
-        L.download_post(post, target=TMP)
-        files = [os.path.join(TMP, f) for f in os.listdir(TMP)]
+        post = instaloader.Post.from_shortcode(loader.context, shortcode)
+        loader.download_post(post, target=TMP_DIR)
+
+        # Yuklangan fayllarni topamiz
+        files = [os.path.join(TMP_DIR, f) for f in os.listdir(TMP_DIR)]
+
+        # Hech narsa topilmasa
+        if not files:
+            bot.send_message(msg.chat.id, "⚠️ Hech qanday rasm yoki video topilmadi.")
+            return
+
+        # Fayllarni ajratib yuborish
         for file in files:
-            if file.endswith(('.jpg', '.jpeg', '.png')):
-                with open(file, "rb") as i: bot.send_photo(msg.chat.id, i)
+            if file.endswith((".jpg", ".jpeg", ".png")):
+                with open(file, "rb") as img:
+                    bot.send_photo(msg.chat.id, img)
             elif file.endswith(".mp4"):
-                with open(file, "rb") as v: bot.send_video(msg.chat.id, v)
+                with open(file, "rb") as vid:
+                    bot.send_video(msg.chat.id, vid)
+
+        # Tozalash
+        for file in files:
             os.remove(file)
+
     except Exception as e:
         bot.send_message(msg.chat.id, f"⚠️ Xato: {e}")
 
