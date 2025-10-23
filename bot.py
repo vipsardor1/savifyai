@@ -15,7 +15,15 @@ def download_media(url):
 
     if not os.path.exists('downloads'):
         os.makedirs('downloads')
-
+    ydl_opts = {
+    'format': 'bestvideo+bestaudio/best',
+    'merge_output_format': 'mp4',
+    'quiet': True,
+    'extract_flat': False,
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'geo_bypass': True,
+}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
