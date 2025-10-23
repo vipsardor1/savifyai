@@ -1,62 +1,55 @@
 import os
-import tempfile
 from pathlib import Path
 from telegram import Update
-from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-from insta_downloader import download_reel, download_profile_posts  # reuse your functions
+from insta_downloader import download_reel, download_profile_posts
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # set your token in environment variable
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise RuntimeError("8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98")
+    BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # For testing
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "👋 Hi! Send me an Instagram link or username.\n"
         "I’ll download posts, reels, or stories for you."
     )
 
-def handle_instagram(update: Update, context: CallbackContext):
+async def handle_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-
-    update.message.reply_text("⏬ Downloading... Please wait.")
-    tmp_dir = tempfile.mkdtemp()
+    await update.message.reply_text("⏬ Downloading... Please wait.")
 
     try:
         if "instagram.com" in text:
-            # Link to reel/post
             download_reel(text)
         else:
-            # Assume it's a username
             download_profile_posts(text, max_count=3)
 
-        # Find downloaded files
         download_dir = Path("downloads") / text.strip("@").split("/")[-1]
         if not download_dir.exists():
-            update.message.reply_text("❌ Nothing downloaded.")
+            await update.message.reply_text("❌ Nothing downloaded.")
             return
 
         for file in download_dir.glob("*"):
             if file.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
-                update.message.reply_photo(photo=open(file, "rb"))
+                with open(file, "rb") as f:
+                    await update.message.reply_photo(photo=f)
             elif file.suffix.lower() in [".mp4", ".mov"]:
-                update.message.reply_video(video=open(file, "rb"))
+                with open(file, "rb") as f:
+                    await update.message.reply_video(video=f)
 
-        update.message.reply_text("✅ Done!")
+        await update.message.reply_text("✅ Done!")
 
     except Exception as e:
-        update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}")
         print(e)
 
 def main():
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_instagram))
-    updater.start_polling()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_instagram))
     print("🤖 Bot is running...")
-    updater.idle()
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
-
