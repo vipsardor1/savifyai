@@ -6,9 +6,9 @@ from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, Callb
 
 from insta_downloader import download_reel, download_profile_posts  # reuse your functions
 
-BOT_TOKEN = os.getenv("8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98")  # set your token in environment variable
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # set your token in environment variable
 if not BOT_TOKEN:
-    raise RuntimeError("Please set BOT_TOKEN environment variable")
+    raise RuntimeError("8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98")
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text(
