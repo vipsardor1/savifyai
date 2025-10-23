@@ -1,5 +1,6 @@
-pyTelegramBotAPI
-yt-dlp
-instaloader
-ffmpeg-python
+python-telegram-bot==20.6
+instaloader==4.9.6
+requests==2.31.0
+aiohttp==3.9.5
+python-dotenv==1.0.0
 
