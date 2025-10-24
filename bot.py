@@ -1,74 +1,65 @@
  "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
 import os
-import instaloader
 import requests
-from io import BytesIO
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
 
-L = instaloader.Instaloader()
-
-# Optional Instagram login
-IG_USER = os.getenv("IG_USER")
-IG_PASS = os.getenv("IG_PASS")
-if IG_USER and IG_PASS:
-    try:
-        L.login(IG_USER, IG_PASS)
-        print("✅ Logged in to Instagram")
-    except Exception as e:
-        print("⚠️ Login failed:", e)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Hi! Send me an Instagram link.\n\n"
-        "Commands:\n"
-        "/post <url> - download a single post or reel\n"
-        "/profile <username> - download latest 3 posts\n"
-        "/story <username> - download current stories"
-    )
-
+# Download command
 async def post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("⚠️ Usage: /post <instagram_url>")
         return
 
     url = context.args[0]
-    print(f"📩 Got URL: {url}")
+    await update.message.reply_text("⏳ Downloading... please wait")
 
     try:
-        shortcode = url.split("/")[-2]
-        print(f"➡️ Shortcode: {shortcode}")
+        api_url = "https://snapsave.app/action.php?lang=en"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+        data = {"url": url}
 
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
-        print("✅ Post fetched successfully")
+        response = requests.post(api_url, headers=headers, data=data)
+        if response.status_code != 200:
+            await update.message.reply_text("❌ API connection failed.")
+            return
 
-        file_url = post.video_url if post.is_video else post.url
-        caption = post.caption if post.caption else "(no caption)"
-        print("📦 Downloading media from:", file_url)
+        html = response.text
+        # Extract download links manually
+        links = []
+        import re
+        matches = re.findall(r'href="(https://[^"]+\.mp4[^"]*)"', html)
+        links.extend(matches)
 
-        r = requests.get(file_url)
-        bio = BytesIO(r.content)
-        bio.name = "media.mp4" if post.is_video else "media.jpg"
+        if not links:
+            await update.message.reply_text("❌ Could not find downloadable media.")
+            return
 
-        await update.message.reply_text(f"📝 Caption:\n{caption[:500]}")
-        await update.message.reply_document(bio)
-        print("✅ Sent media successfully")
+        for link in links:
+            await update.message.reply_text("🎥 Sending video...")
+            await update.message.reply_video(video=link)
+        await update.message.reply_text("✅ Done!")
 
     except Exception as e:
-        print("❌ Error in /post:", e)
         await update.message.reply_text(f"❌ Error: {e}")
+        print("Error:", e)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Hi! Send me an Instagram link using:\n\n"
+        "/post <url>\n\nExample:\n/post https://www.instagram.com/reel/DPpyKvsAi5J/"
+    )
 
 def main():
-    print("🚀 Bot starting...")
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("post", post))
-
+    print("🚀 Bot running...")
     app.run_polling()
-    print("✅ Bot running!")
 
 if __name__ == "__main__":
     main()
