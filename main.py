@@ -6,7 +6,7 @@ from io import BytesIO
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # set in Railway
+BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # your bot token
 L = instaloader.Instaloader()
 
 # Optional login for private profiles
@@ -51,7 +51,7 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         profile = instaloader.Profile.from_username(L.context, username)
         count = 0
         for post in profile.get_posts():
-            if count >= 3:  # limit to 3 posts for demo
+            if count >= 3:
                 break
             url = post.video_url if post.is_video else post.url
             r = requests.get(url)
@@ -91,12 +91,12 @@ async def hashtag(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bio = BytesIO(r.content)
             bio.name = "media.mp4" if post.is_video else "media.jpg"
             await update.message.reply_document(bio)
-            break  # send only one for demo
+            break
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
 def main():
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("post", post))
     app.add_handler(CommandHandler("profile", profile))
