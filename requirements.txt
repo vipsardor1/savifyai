@@ -1,7 +1,5 @@
-python-telegram-bot==20.7
-requests==2.31.0
-python-dotenv
+python-telegram-bot
 instaloader
 yt-dlp
-acrcloud-sdk-python
+acrcloud-sdk
 ffmpeg-python
