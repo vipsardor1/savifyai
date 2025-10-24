@@ -1,20 +1,19 @@
 import os
+import re
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# 🔹 Agar Railway-da bo‘lsangiz, Environment Variables-da BOT_TOKEN kiriting.
-# Agar lokalda sinov qilayotgan bo‘lsangiz, quyidagidek yozing:
-BOT_TOKEN =  "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # Tokeningizni shu yerga yozing
+BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98" # o‘zingizning tokeningizni yozing
 
 # /start buyrug‘i
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Salom! Men SaveGram botman.\n"
-        "Menga Instagram post, reel yoki story link yuboring — men uni yuklab beraman 📥"
+        "👋 Salom! Men SnapInsta botman.\n"
+        "Menga Instagram post yoki reel link yuboring — men uni yuklab beraman 📥"
     )
 
-# Instagram linkni qabul qilib, yuklash
+# Yuklab olish funksiyasi
 async def download_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = update.message.text.strip()
 
@@ -25,34 +24,35 @@ async def download_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("⏳ Yuklanmoqda, biroz kuting...")
 
     try:
-       
-        response = requests.get(f"https://snapinsta.app/api?url={link}")
-        print("🔍 Server javobi:", response.text)  # debug uchun
+        response = requests.get(f"https://snapinsta.app/api?url={link}", headers={
+            "User-Agent": "Mozilla/5.0"
+        })
 
-        data = response.json()
+        html = response.text
+        print("🔍 HTML uzunligi:", len(html))  # tekshirish uchun
 
-        # Tekshirish
-        if "medias" in data and len(data["medias"]) > 0:
-            media_url = data["medias"][0]["url"]
+        # Video yoki rasm URL ni HTML ichidan ajratib olish
+        urls = re.findall(r'(https?://[^"]+\.(?:mp4|jpg|jpeg|png))', html)
 
-            # Foydalanuvchiga video/rasm yuborish
-            if data["medias"][0]["type"] == "video":
-                await update.message.reply_video(video=media_url, caption="🎬 Video yuklandi!")
-            else:
-                await update.message.reply_photo(photo=media_url, caption="🖼 Rasm yuklandi!")
+        if not urls:
+            await update.message.reply_text("⚠️ Yuklab olinadigan fayl topilmadi.")
+            return
+
+        media_url = urls[0]
+
+        if media_url.endswith(".mp4"):
+            await update.message.reply_video(video=media_url, caption="🎬 Video yuklandi!")
         else:
-            await update.message.reply_text("⚠️ Hech narsa topilmadi. Linkni qayta tekshirib yuboring.")
+            await update.message.reply_photo(photo=media_url, caption="🖼 Rasm yuklandi!")
 
     except Exception as e:
         await update.message.reply_text(f"❌ Xatolik: {e}")
 
-# Asosiy ishga tushirish funksiyasi
+# Asosiy ishga tushirish
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_instagram))
-
     print("🚀 Bot ishga tushdi...")
     app.run_polling()
 
