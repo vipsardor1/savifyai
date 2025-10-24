@@ -16,7 +16,8 @@ async def handle_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # SaveGram API orqali yuklash
         api_url = f"https://savegram.app/api/download?url={url}"
-        response = requests.get(api_url, timeout=15).json()
+        response = requests.get(f"https://savegram.io/api?url={link}")
+print(response.text)  # nima javob qaytaryapti ko‘ring
 
         media = response.get("media", [])
         if not media:
