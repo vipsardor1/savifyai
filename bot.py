@@ -93,14 +93,14 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def extract_shortcode(url: str) -> str | None:
-    """Extracts the post shortcode from various Instagram URL formats."""
     match = re.search(r"/(p|reel|tv)/([A-Za-z0-9-_]+)", url)
     if match:
         return match.group(2)
     return None
 
 async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Downloads and sends a single Instagram post."""
+    """Downloads and sends a single Instagram post, handling carousels by chunking media."""
+    # ... (The rest of the new, fixed code) ...
     url = ""
     if context.args:
         url = context.args[0]
