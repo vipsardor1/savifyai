@@ -25,8 +25,8 @@ async def download_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("⏳ Yuklanmoqda, biroz kuting...")
 
     try:
-        # SaveGram API dan ma’lumot olish
-        response = requests.get(f"https://savegram.io/api?url={link}")
+       
+        response = requests.get(f"https://snapinsta.app/api?url={link}")
         print("🔍 Server javobi:", response.text)  # debug uchun
 
         data = response.json()
