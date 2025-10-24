@@ -47,7 +47,7 @@ except Exception as e:
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a welcome message when the /start command is issued."""
     await update.message.reply_text(
-        "Hi! I'm an Instagram downloader bot. 📸\n\n"
+        "Hi! I'm a savifyai bot. 📸\n\n"
         "Send me a link to an Instagram post, and I'll download it for you.\n\n"
         "**Commands:**\n"
         "➤ `/post <url>` - Downloads a single post.\n"
@@ -93,20 +93,24 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def extract_shortcode(url: str) -> str | None:
-    """Extracts the post shortcode from various Instagram URL formats."""
     match = re.search(r"/(p|reel|tv)/([A-Za-z0-9-_]+)", url)
     if match:
         return match.group(2)
     return None
 
 async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Downloads and sends a single Instagram post."""
+    """Downloads and sends a single Instagram post, handling carousels by chunking media."""
+    user_id = update.message.from_user.id
+    L = await get_user_loader(user_id)
+    
+    if not L:
+        await update.message.reply_text("You must be logged in to use this command. Use `/login <username> <password>`.")
+        return
+
     url = ""
     if context.args:
-        # Came from /post command
         url = context.args[0]
     elif update.message.text:
-        # Came from a plain text message
         url = update.message.text
         
     shortcode = extract_shortcode(url)
@@ -117,57 +121,63 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Got it! Downloading post...")
     
-    # Create a temporary directory to download into
-    # This keeps downloads from different users separate
-    download_dir = f"temp_{shortcode}"
+    # --- MODIFIED: Use a unique temp dir for each user and post ---
+    download_dir = os.path.join(STORAGE_DIR, f"temp_{user_id}_{shortcode}")
 
     try:
-        # Get post object
         post = instaloader.Post.from_shortcode(L.context, shortcode)
-
-        # Download the post
         L.download_post(post, target=download_dir)
         
-        media_files = []
         media_group = []
         
-        # Find the downloaded files (images and videos)
-        for filename in os.listdir(download_dir):
+        # Collect all downloaded media files
+        for filename in sorted(os.listdir(download_dir)):
+            path = os.path.join(download_dir, filename)
             if filename.endswith(('.jpg', '.jpeg', '.png')):
-                path = os.path.join(download_dir, filename)
-                media_files.append(path)
                 media_group.append(InputMediaPhoto(media=open(path, 'rb')))
             elif filename.endswith('.mp4'):
-                path = os.path.join(download_dir, filename)
-                media_files.append(path)
                 media_group.append(InputMediaVideo(media=open(path, 'rb')))
 
-        if not media_files:
-            await update.message.reply_text("Could not find any media in that post.")
+        if not media_group:
+            await update.message.reply_text("Could not find any media in that post. This might be a private story highlight or an unsupported format.")
             return
 
-        # Send the media
-        if len(media_group) == 1:
-            # Send single photo or video
-            if media_files[0].endswith('.mp4'):
-                await update.message.reply_video(video=open(media_files[0], 'rb'), caption=post.caption)
-            else:
-                await update.message.reply_photo(photo=open(media_files[0], 'rb'), caption=post.caption)
-        else:
-            # Send as an album (media group)
-            # Add caption to the first item only
+        # Add caption to the first item only
+        if media_group:
             media_group[0].caption = post.caption
-            await update.message.reply_media_group(media=media_group)
+
+        # --- CRITICAL FIX: Loop to send in chunks of 10 ---
+        # Telegram's limit for a media group is 10 items.
+        
+        # Send media in groups of up to 10
+        chunk_size = 10
+        for i in range(0, len(media_group), chunk_size):
+            chunk = media_group[i:i + chunk_size]
+            
+            # For chunks after the first one, clear the caption so it's not repeated
+            if i > 0 and chunk[0].caption:
+                chunk[0].caption = None
+                
+            await update.message.reply_media_group(media=chunk)
+            
+            # Close file handlers after sending to prevent memory leaks/file locks
+            for media_item in chunk:
+                 if hasattr(media_item.media, 'close'):
+                    media_item.media.close()
 
     except Exception as e:
-        logger.error(f"Error downloading post {shortcode}: {e}")
+        logger.error(f"Error downloading post {shortcode} for user {user_id}: {e}")
         await update.message.reply_text(f"Sorry, I couldn't download that post. Is the account private or is the post deleted?")
     
     finally:
-        # --- CRITICAL: Clean up the downloaded files ---
+        # Cleanup the temporary directory
         if os.path.exists(download_dir):
-            shutil.rmtree(download_dir)
-            logger.info(f"Cleaned up directory: {download_dir}")
+            try:
+                shutil.rmtree(download_dir)
+                logger.info(f"Cleaned up directory: {download_dir}")
+            except OSError as e:
+                # This can sometimes fail if files are still being held by the OS
+                logger.warning(f"Failed to remove directory {download_dir}: {e}")
 
 
 def main():
