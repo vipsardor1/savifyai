@@ -1,3 +1,4 @@
+"8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98" 
 import os
 import logging
 import re
@@ -8,7 +9,7 @@ import instaloader
 
 # --- CONFIGURATION ---
 # !! REPLACE WITH YOUR TELEGRAM BOT TOKEN !!
-TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98" 
+TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM9E" 
 
 # !! (RECOMMENDED) ADD YOUR INSTAGRAM USERNAME AND PASSWORD !!
 # This is crucial for reliability.
@@ -48,7 +49,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a welcome message when the /start command is issued."""
     await update.message.reply_text(
         "Hi! I'm an Instagram downloader bot. 📸\n\n"
-        "Hi! I'm a savifyai bot. 📸\n\n"
         "Send me a link to an Instagram post, and I'll download it for you.\n\n"
         "**Commands:**\n"
         "➤ `/post <url>` - Downloads a single post.\n"
@@ -71,7 +71,7 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         profile = instaloader.Profile.from_username(L.context, username)
-
+        
         caption = (
             f"👤 *{profile.full_name}* (@{profile.username})\n"
             f"bio: _{profile.biography}_\n\n"
@@ -80,7 +80,7 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"★ *{profile.mediacount}* posts\n"
             f"🔗 {profile.external_url}"
         )
-
+        
         # Send profile pic and caption
         await update.message.reply_photo(
             photo=profile.get_profile_pic_url(),
@@ -102,14 +102,6 @@ def extract_shortcode(url: str) -> str | None:
 
 async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Downloads and sends a single Instagram post."""
-    """Downloads and sends a single Instagram post, handling carousels by chunking media."""
-    user_id = update.message.from_user.id
-    L = await get_user_loader(user_id)
-    
-    if not L:
-        await update.message.reply_text("You must be logged in to use this command. Use `/login <username> <password>`.")
-        return
-
     url = ""
     if context.args:
         # Came from /post command
@@ -117,7 +109,7 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.message.text:
         # Came from a plain text message
         url = update.message.text
-
+        
     shortcode = extract_shortcode(url)
 
     if not shortcode:
@@ -125,12 +117,10 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text("Got it! Downloading post...")
-
+    
     # Create a temporary directory to download into
     # This keeps downloads from different users separate
     download_dir = f"temp_{shortcode}"
-    # --- MODIFIED: Use a unique temp dir for each user and post ---
-    download_dir = os.path.join(STORAGE_DIR, f"temp_{user_id}_{shortcode}")
 
     try:
         # Get post object
@@ -138,15 +128,12 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Download the post
         L.download_post(post, target=download_dir)
-
+        
         media_files = []
         media_group = []
-
+        
         # Find the downloaded files (images and videos)
         for filename in os.listdir(download_dir):
-        # Collect all downloaded media files
-        for filename in sorted(os.listdir(download_dir)):
-            path = os.path.join(download_dir, filename)
             if filename.endswith(('.jpg', '.jpeg', '.png')):
                 path = os.path.join(download_dir, filename)
                 media_files.append(path)
@@ -158,8 +145,6 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not media_files:
             await update.message.reply_text("Could not find any media in that post.")
-        if not media_group:
-            await update.message.reply_text("Could not find any media in that post. This might be a private story highlight or an unsupported format.")
             return
 
         # Send the media
@@ -172,59 +157,30 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             # Send as an album (media group)
             # Add caption to the first item only
-        # Add caption to the first item only
-        if media_group:
             media_group[0].caption = post.caption
             await update.message.reply_media_group(media=media_group)
 
-        # --- CRITICAL FIX: Loop to send in chunks of 10 ---
-        # Telegram's limit for a media group is 10 items.
-        
-        # Send media in groups of up to 10
-        chunk_size = 10
-        for i in range(0, len(media_group), chunk_size):
-            chunk = media_group[i:i + chunk_size]
-            
-            # For chunks after the first one, clear the caption so it's not repeated
-            if i > 0 and chunk[0].caption:
-                chunk[0].caption = None
-                
-            await update.message.reply_media_group(media=chunk)
-            
-            # Close file handlers after sending to prevent memory leaks/file locks
-            for media_item in chunk:
-                 if hasattr(media_item.media, 'close'):
-                    media_item.media.close()
-
     except Exception as e:
         logger.error(f"Error downloading post {shortcode}: {e}")
-        logger.error(f"Error downloading post {shortcode} for user {user_id}: {e}")
         await update.message.reply_text(f"Sorry, I couldn't download that post. Is the account private or is the post deleted?")
-
+    
     finally:
         # --- CRITICAL: Clean up the downloaded files ---
-        # Cleanup the temporary directory
         if os.path.exists(download_dir):
             shutil.rmtree(download_dir)
             logger.info(f"Cleaned up directory: {download_dir}")
-            try:
-                shutil.rmtree(download_dir)
-                logger.info(f"Cleaned up directory: {download_dir}")
-            except OSError as e:
-                # This can sometimes fail if files are still being held by the OS
-                logger.warning(f"Failed to remove directory {download_dir}: {e}")
 
 
 def main():
     """Start the bot."""
-
+    
     # Make sure token is set
     if TELEGRAM_TOKEN == "YOUR_BOT_TOKEN_HERE":
         logger.error("!!! BOT TOKEN IS NOT SET. Please edit the bot.py file. !!!")
         return
-
+        
     logger.info("Starting bot...")
-
+    
     # Create the Application
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
