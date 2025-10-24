@@ -6,7 +6,7 @@ from io import BytesIO
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # set in Railway
+BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # set in Railway
 L = instaloader.Instaloader()
 
 # Optional login for private profiles
