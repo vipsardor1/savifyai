@@ -7,13 +7,13 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import instaloader
 
 # --- CONFIGURATION ---
-# Get token from Railway environment variables (Secure Way)
-TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
+# !! REPLACE WITH YOUR TELEGRAM BOT TOKEN !!
+TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98" 
 
-# --- Define persistent storage paths ---
-# This is the mount path for your Railway Volume
-STORAGE_DIR = "/app/storage"
-os.makedirs(STORAGE_DIR, exist_ok=True) 
+# !! (RECOMMENDED) ADD YOUR INSTAGRAM USERNAME AND PASSWORD !!
+# This is crucial for reliability.
+INSTA_USERNAME = "savifyai" 
+INSTA_PASSWORD = "200502saxx"
 
 # Enable logging
 logging.basicConfig(
@@ -21,141 +21,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# --- INSTALOADER SETUP ---
+L = instaloader.Instaloader(
+    download_videos=True,
+    download_video_thumbnails=False,
+    download_geotags=False,
+    download_comments=False,
+    save_metadata=False,
+    compress_json=False,
+    post_metadata_txt_pattern="",
+    max_connection_attempts=1,
+)
 
-# ----------------------------------------------------------------------
-#                         SESSION MANAGEMENT
-# ----------------------------------------------------------------------
-
-def get_session_file(user_id: int) -> str:
-    """Returns the unique session file path for a given user."""
-    return os.path.join(STORAGE_DIR, f"session_{user_id}.session")
-
-async def get_user_loader(user_id: int) -> instaloader.Instaloader | None:
-    """
-    Loads and returns an Instaloader instance for a specific user.
-    Returns None if the user is not logged in or session is expired.
-    """
-    session_file = get_session_file(user_id)
-    L = instaloader.Instaloader(
-        download_videos=True,
-        download_video_thumbnails=False,
-        download_geotags=False,
-        download_comments=False,
-        save_metadata=False,
-        compress_json=False,
-        post_metadata_txt_pattern="",
-        max_connection_attempts=1,
-    )
-    
-    if not os.path.exists(session_file):
-        return None
-
-    try:
-        # We load the session using the telegram ID as a placeholder username
-        L.load_session_from_file(username=str(user_id), filename=session_file)
-        
-        # Test the login to ensure the session is still valid
-        L.test_login() 
-        logger.info(f"Successfully loaded session for user {user_id}")
-        return L
-    except Exception as e:
-        logger.warning(f"Could not load session for user {user_id}: {e}")
-        # Session is likely expired or invalid, delete it
-        os.remove(session_file)
-        return None
+# Try to log in to Instagram
+try:
+    L.login(INSTA_USERNAME, INSTA_PASSWORD)
+    logger.info(f"Successfully logged in to Instagram as {INSTA_USERNAME}")
+except Exception as e:
+    logger.warning(f"Could not log in to Instagram: {e}. Bot will run unauthenticated.")
+    logger.warning("Expect errors and rate-limiting!")
 
 
-# ----------------------------------------------------------------------
-#                           BOT HANDLERS
-# ----------------------------------------------------------------------
+# --- BOT HANDLERS ---
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends a welcome message when the /start command is issued."""
     await update.message.reply_text(
         "Hi! I'm an Instagram downloader bot. 📸\n\n"
-        "To use me, you must first log in to your *own* Instagram account.\n\n"
-        "**COMMANDS:**\n"
-        "➤ `/login <username> <password>`\n"
-        "   (Your password is deleted immediately)\n\n"
-        "➤ `/post <url>` - Downloads a post (handles carousels).\n"
-        "➤ `/profile <username>` - Gets profile info.\n"
-        "➤ `/status` - Checks your login status.\n"
-        "➤ `/logout` - Logs you out and deletes your session.",
-        parse_mode='Markdown'
+        "Send me a link to an Instagram post, and I'll download it for you.\n\n"
+        "**Commands:**\n"
+        "➤ `/post <url>` - Downloads a single post.\n"
+        "➤ `/profile <username>` - Gets profile info and pic.\n\n"
+        "Just sending a post URL will also work!"
     )
 
-async def login_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Logs a user in and saves their session."""
-    user_id = update.message.from_user.id
-    chat_id = update.effective_chat.id
-    message_id = update.message.message_id
-    
-    if not context.args or len(context.args) != 2:
-        await update.message.reply_text("Usage: `/login <username> <password>`")
-        return
-
-    username = context.args[0]
-    password = context.args[1]
-    
-    # --- CRITICAL: DELETE THE PASSWORD MESSAGE ---
-    try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception:
-        pass # Ignore failure if bot is not admin or in private chat
-        
-    await update.message.reply_text(f"Logging in as {username}... This may take a moment.")
-    
-    L = instaloader.Instaloader()
-    session_file = get_session_file(user_id)
-
-    try:
-        L.login(username, password)
-        # We save the session by the telegram ID
-        L.save_session_to_file(username=str(user_id), filename=session_file)
-        await update.message.reply_text(
-            "✅ Login successful!\n\n"
-            "Your session is saved. You can now use the bot."
-        )
-        
-    except Exception as e:
-        logger.error(f"Login failed for user {user_id}: {e}")
-        await update.message.reply_text(
-            f"❌ **Login Failed!**\n\n"
-            f"**Error:** `{e}`\n\n"
-            "If this is a 2FA error, the bot does not support 2FA."
-        , parse_mode='Markdown')
-
-async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Logs a user out by deleting their session file."""
-    user_id = update.message.from_user.id
-    session_file = get_session_file(user_id)
-    
-    if os.path.exists(session_file):
-        os.remove(session_file)
-        await update.message.reply_text("You have been logged out. Your session file is deleted.")
-    else:
-        await update.message.reply_text("You are not logged in.")
-
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Checks if the user's session is active."""
-    user_id = update.message.from_user.id
-    L = await get_user_loader(user_id)
-    
-    if L:
-        await update.message.reply_text(f"✅ You are logged in.\n(Session is active)")
-    else:
-        await update.message.reply_text("❌ You are not logged in. Use `/login` to start.")
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends the help message."""
+    await start_command(update, context) # Just re-use the start message
 
 async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Fetches and sends profile information."""
-    user_id = update.message.from_user.id
-    L = await get_user_loader(user_id)
-    
-    if not L:
-        await update.message.reply_text("You must be logged in to use this command. Use `/login`.")
-        return
-
     if not context.args:
-        await update.message.reply_text("Usage: `/profile <username>`")
+        await update.message.reply_text("Please provide a username.\nUsage: `/profile <username>`")
         return
 
     username = context.args[0]
@@ -173,6 +80,7 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔗 {profile.external_url}"
         )
         
+        # Send profile pic and caption
         await update.message.reply_photo(
             photo=profile.get_profile_pic_url(),
             caption=caption,
@@ -180,8 +88,8 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        logger.error(f"Error fetching profile {username} for user {user_id}: {e}")
-        await update.message.reply_text(f"Could not fetch profile '{username}'. Is it correct and are you following them (if private)?")
+        logger.error(f"Error fetching profile {username}: {e}")
+        await update.message.reply_text(f"Could not fetch profile '{username}'. Is it correct and public?")
 
 
 def extract_shortcode(url: str) -> str | None:
@@ -192,21 +100,13 @@ def extract_shortcode(url: str) -> str | None:
     return None
 
 async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Downloads and sends a single Instagram post.
-    ✅ FIX: Includes logic to send media in chunks of 10.
-    """
-    user_id = update.message.from_user.id
-    L = await get_user_loader(user_id)
-    
-    if not L:
-        await update.message.reply_text("You must be logged in to use this command. Use `/login <username> <password>`.")
-        return
-
+    """Downloads and sends a single Instagram post."""
     url = ""
     if context.args:
+        # Came from /post command
         url = context.args[0]
     elif update.message.text:
+        # Came from a plain text message
         url = update.message.text
         
     shortcode = extract_shortcode(url)
@@ -217,85 +117,79 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Got it! Downloading post...")
     
-    # --- Use a unique temp dir for each user and post ---
-    download_dir = os.path.join(STORAGE_DIR, f"temp_{user_id}_{shortcode}")
+    # Create a temporary directory to download into
+    # This keeps downloads from different users separate
+    download_dir = f"temp_{shortcode}"
 
     try:
+        # Get post object
         post = instaloader.Post.from_shortcode(L.context, shortcode)
+
+        # Download the post
         L.download_post(post, target=download_dir)
         
+        media_files = []
         media_group = []
         
-        # Collect all downloaded media files
-        for filename in sorted(os.listdir(download_dir)):
-            path = os.path.join(download_dir, filename)
+        # Find the downloaded files (images and videos)
+        for filename in os.listdir(download_dir):
             if filename.endswith(('.jpg', '.jpeg', '.png')):
+                path = os.path.join(download_dir, filename)
+                media_files.append(path)
                 media_group.append(InputMediaPhoto(media=open(path, 'rb')))
             elif filename.endswith('.mp4'):
+                path = os.path.join(download_dir, filename)
+                media_files.append(path)
                 media_group.append(InputMediaVideo(media=open(path, 'rb')))
 
-        if not media_group:
-            await update.message.reply_text("Could not find any media in that post. This might be a private story highlight or an unsupported format.")
+        if not media_files:
+            await update.message.reply_text("Could not find any media in that post.")
             return
 
-        # Add caption to the first item only
-        if media_group:
+        # Send the media
+        if len(media_group) == 1:
+            # Send single photo or video
+            if media_files[0].endswith('.mp4'):
+                await update.message.reply_video(video=open(media_files[0], 'rb'), caption=post.caption)
+            else:
+                await update.message.reply_photo(photo=open(media_files[0], 'rb'), caption=post.caption)
+        else:
+            # Send as an album (media group)
+            # Add caption to the first item only
             media_group[0].caption = post.caption
-
-        # --- CRITICAL FIX: Loop to send in chunks of 10 (Telegram's limit) ---
-        chunk_size = 10
-        for i in range(0, len(media_group), chunk_size):
-            chunk = media_group[i:i + chunk_size]
-            
-            # For chunks after the first one, clear the caption so it's not repeated
-            if i > 0 and chunk[0].caption:
-                chunk[0].caption = None
-                
-            await update.message.reply_media_group(media=chunk)
-            
-            # Close file handlers after sending to prevent memory leaks/file locks
-            for media_item in chunk:
-                 if hasattr(media_item.media, 'close'):
-                    media_item.media.close()
+            await update.message.reply_media_group(media=media_group)
 
     except Exception as e:
-        logger.error(f"Error downloading post {shortcode} for user {user_id}: {e}")
+        logger.error(f"Error downloading post {shortcode}: {e}")
         await update.message.reply_text(f"Sorry, I couldn't download that post. Is the account private or is the post deleted?")
     
     finally:
-        # Cleanup the temporary directory
+        # --- CRITICAL: Clean up the downloaded files ---
         if os.path.exists(download_dir):
-            try:
-                shutil.rmtree(download_dir)
-                logger.info(f"Cleaned up directory: {download_dir}")
-            except OSError as e:
-                logger.warning(f"Failed to remove directory {download_dir}: {e}")
+            shutil.rmtree(download_dir)
+            logger.info(f"Cleaned up directory: {download_dir}")
 
-
-# ----------------------------------------------------------------------
-#                             MAIN FUNCTION
-# ----------------------------------------------------------------------
 
 def main():
     """Start the bot."""
     
-    if not TELEGRAM_TOKEN:
-        logger.error("!!! TELEGRAM_TOKEN is NOT SET. Please add it to Railway environment variables. !!!")
+    # Make sure token is set
+    if TELEGRAM_TOKEN == "YOUR_BOT_TOKEN_HERE":
+        logger.error("!!! BOT TOKEN IS NOT SET. Please edit the bot.py file. !!!")
         return
         
-    logger.info("Starting bot (multi-user mode)...")
+    logger.info("Starting bot...")
     
+    # Create the Application
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
     # --- Register Handlers ---
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", start_command)) # Alias
-    application.add_handler(CommandHandler("login", login_command))
-    application.add_handler(CommandHandler("logout", logout_command))
-    application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("profile", get_profile))
     application.add_handler(CommandHandler("post", download_post))
 
+    # Add a handler for plain text messages containing Instagram URLs
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND & (filters.Regex(r"instagram.com/(p|reel|tv)/")), 
@@ -303,6 +197,7 @@ def main():
         )
     )
 
+    # Run the bot until you press Ctrl-C
     logger.info("Bot is running. Press Ctrl-C to stop.")
     application.run_polling()
 
