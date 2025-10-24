@@ -1,4 +1,4 @@
-import os
+ import os
 import logging
 import re
 import shutil
@@ -7,13 +7,18 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import instaloader
 
 # --- CONFIGURATION ---
-# !! REPLACE WITH YOUR TELEGRAM BOT TOKEN !!
-TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM9E" 
-
-# !! (RECOMMENDED) ADD YOUR INSTAGRAM USERNAME AND PASSWORD !!
-# This is crucial for reliability.
-INSTA_USERNAME = "savifyai" 
+# !! THESE WILL BE SET IN RAILWAY, NOT HERE !!
+TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM9E"
+INSTA_USERNAME = "savifyai"
 INSTA_PASSWORD = "200502saxx"
+
+# --- NEW: Define persistent storage paths ---
+# We will tell Railway to create a volume at /app/storage
+STORAGE_DIR = "/app/storage"
+SESSION_FILE = os.path.join(STORAGE_DIR, f"{INSTA_USERNAME}.session")
+
+# Ensure the storage directory exists
+os.makedirs(STORAGE_DIR, exist_ok=True) 
 
 # Enable logging
 logging.basicConfig(
@@ -33,13 +38,26 @@ L = instaloader.Instaloader(
     max_connection_attempts=1,
 )
 
-# Try to log in to Instagram
+# --- NEW: Persistent Login Logic ---
 try:
-    L.login(INSTA_USERNAME, INSTA_PASSWORD)
-    logger.info(f"Successfully logged in to Instagram as {INSTA_USERNAME}")
+    if os.path.exists(SESSION_FILE):
+        logger.info(f"Loading session from file: {SESSION_FILE}")
+        L.load_session_from_file(INSTA_USERNAME, SESSION_FILE)
+        L.test_login() # Test if the session is still valid
+        logger.info(f"Successfully loaded session for {INSTA_USERNAME}")
+    else:
+        logger.info("Session file not found, logging in with credentials...")
+        L.login(INSTA_USERNAME, INSTA_PASSWORD)
+        logger.info(f"Successfully logged in as {INSTA_USERNAME}")
+        L.save_session_to_file(SESSION_FILE)
+        logger.info(f"Session saved to {SESSION_FILE}")
+
 except Exception as e:
-    logger.warning(f"Could not log in to Instagram: {e}. Bot will run unauthenticated.")
-    logger.warning("Expect errors and rate-limiting!")
+    logger.error(f"Error during Instagram login: {e}")
+    logger.warning("Bot might be unauthenticated and will likely fail.")
+    # If login fails, try to proceed unauthenticated (will be rate-limited)
+    pass
+# --- END OF NEW LOGIN LOGIC ---
 
 
 # --- BOT HANDLERS ---
@@ -80,7 +98,6 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔗 {profile.external_url}"
         )
         
-        # Send profile pic and caption
         await update.message.reply_photo(
             photo=profile.get_profile_pic_url(),
             caption=caption,
@@ -103,10 +120,8 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Downloads and sends a single Instagram post."""
     url = ""
     if context.args:
-        # Came from /post command
         url = context.args[0]
     elif update.message.text:
-        # Came from a plain text message
         url = update.message.text
         
     shortcode = extract_shortcode(url)
@@ -117,21 +132,16 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Got it! Downloading post...")
     
-    # Create a temporary directory to download into
-    # This keeps downloads from different users separate
-    download_dir = f"temp_{shortcode}"
+    # --- MODIFIED: Use the persistent storage for temp downloads ---
+    download_dir = os.path.join(STORAGE_DIR, f"temp_{shortcode}")
 
     try:
-        # Get post object
         post = instaloader.Post.from_shortcode(L.context, shortcode)
-
-        # Download the post
         L.download_post(post, target=download_dir)
         
         media_files = []
         media_group = []
         
-        # Find the downloaded files (images and videos)
         for filename in os.listdir(download_dir):
             if filename.endswith(('.jpg', '.jpeg', '.png')):
                 path = os.path.join(download_dir, filename)
@@ -146,16 +156,12 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Could not find any media in that post.")
             return
 
-        # Send the media
         if len(media_group) == 1:
-            # Send single photo or video
             if media_files[0].endswith('.mp4'):
                 await update.message.reply_video(video=open(media_files[0], 'rb'), caption=post.caption)
             else:
                 await update.message.reply_photo(photo=open(media_files[0], 'rb'), caption=post.caption)
         else:
-            # Send as an album (media group)
-            # Add caption to the first item only
             media_group[0].caption = post.caption
             await update.message.reply_media_group(media=media_group)
 
@@ -164,7 +170,6 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Sorry, I couldn't download that post. Is the account private or is the post deleted?")
     
     finally:
-        # --- CRITICAL: Clean up the downloaded files ---
         if os.path.exists(download_dir):
             shutil.rmtree(download_dir)
             logger.info(f"Cleaned up directory: {download_dir}")
@@ -173,23 +178,21 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Start the bot."""
     
-    # Make sure token is set
-    if TELEGRAM_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        logger.error("!!! BOT TOKEN IS NOT SET. Please edit the bot.py file. !!!")
+    # --- MODIFIED: Check for environment variables ---
+    if not TELEGRAM_TOKEN or not INSTA_USERNAME or not INSTA_PASSWORD:
+        logger.error("!!! MISSING ENVIRONMENT VARIABLES !!!")
+        logger.error("Please set TELEGRAM_TOKEN, INSTA_USERNAME, and INSTA_PASSWORD in Railway.")
         return
         
     logger.info("Starting bot...")
     
-    # Create the Application
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # --- Register Handlers ---
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("profile", get_profile))
     application.add_handler(CommandHandler("post", download_post))
 
-    # Add a handler for plain text messages containing Instagram URLs
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND & (filters.Regex(r"instagram.com/(p|reel|tv)/")), 
@@ -197,7 +200,6 @@ def main():
         )
     )
 
-    # Run the bot until you press Ctrl-C
     logger.info("Bot is running. Press Ctrl-C to stop.")
     application.run_polling()
 
