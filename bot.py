@@ -93,20 +93,14 @@ async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def extract_shortcode(url: str) -> str | None:
+    """Extracts the post shortcode from various Instagram URL formats."""
     match = re.search(r"/(p|reel|tv)/([A-Za-z0-9-_]+)", url)
     if match:
         return match.group(2)
     return None
 
 async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Downloads and sends a single Instagram post, handling carousels by chunking media."""
-    user_id = update.message.from_user.id
-    L = await get_user_loader(user_id)
-    
-    if not L:
-        await update.message.reply_text("You must be logged in to use this command. Use `/login <username> <password>`.")
-        return
-
+    """Downloads and sends a single Instagram post."""
     url = ""
     if context.args:
         url = context.args[0]
@@ -121,63 +115,47 @@ async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Got it! Downloading post...")
     
-    # --- MODIFIED: Use a unique temp dir for each user and post ---
-    download_dir = os.path.join(STORAGE_DIR, f"temp_{user_id}_{shortcode}")
+    # --- MODIFIED: Use the persistent storage for temp downloads ---
+    download_dir = os.path.join(STORAGE_DIR, f"temp_{shortcode}")
 
     try:
         post = instaloader.Post.from_shortcode(L.context, shortcode)
         L.download_post(post, target=download_dir)
         
+        media_files = []
         media_group = []
         
-        # Collect all downloaded media files
-        for filename in sorted(os.listdir(download_dir)):
-            path = os.path.join(download_dir, filename)
+        for filename in os.listdir(download_dir):
             if filename.endswith(('.jpg', '.jpeg', '.png')):
+                path = os.path.join(download_dir, filename)
+                media_files.append(path)
                 media_group.append(InputMediaPhoto(media=open(path, 'rb')))
             elif filename.endswith('.mp4'):
+                path = os.path.join(download_dir, filename)
+                media_files.append(path)
                 media_group.append(InputMediaVideo(media=open(path, 'rb')))
 
-        if not media_group:
-            await update.message.reply_text("Could not find any media in that post. This might be a private story highlight or an unsupported format.")
+        if not media_files:
+            await update.message.reply_text("Could not find any media in that post.")
             return
 
-        # Add caption to the first item only
-        if media_group:
+        if len(media_group) == 1:
+            if media_files[0].endswith('.mp4'):
+                await update.message.reply_video(video=open(media_files[0], 'rb'), caption=post.caption)
+            else:
+                await update.message.reply_photo(photo=open(media_files[0], 'rb'), caption=post.caption)
+        else:
             media_group[0].caption = post.caption
-
-        # --- CRITICAL FIX: Loop to send in chunks of 10 ---
-        # Telegram's limit for a media group is 10 items.
-        
-        # Send media in groups of up to 10
-        chunk_size = 10
-        for i in range(0, len(media_group), chunk_size):
-            chunk = media_group[i:i + chunk_size]
-            
-            # For chunks after the first one, clear the caption so it's not repeated
-            if i > 0 and chunk[0].caption:
-                chunk[0].caption = None
-                
-            await update.message.reply_media_group(media=chunk)
-            
-            # Close file handlers after sending to prevent memory leaks/file locks
-            for media_item in chunk:
-                 if hasattr(media_item.media, 'close'):
-                    media_item.media.close()
+            await update.message.reply_media_group(media=media_group)
 
     except Exception as e:
-        logger.error(f"Error downloading post {shortcode} for user {user_id}: {e}")
+        logger.error(f"Error downloading post {shortcode}: {e}")
         await update.message.reply_text(f"Sorry, I couldn't download that post. Is the account private or is the post deleted?")
     
     finally:
-        # Cleanup the temporary directory
         if os.path.exists(download_dir):
-            try:
-                shutil.rmtree(download_dir)
-                logger.info(f"Cleaned up directory: {download_dir}")
-            except OSError as e:
-                # This can sometimes fail if files are still being held by the OS
-                logger.warning(f"Failed to remove directory {download_dir}: {e}")
+            shutil.rmtree(download_dir)
+            logger.info(f"Cleaned up directory: {download_dir}")
 
 
 def main():
