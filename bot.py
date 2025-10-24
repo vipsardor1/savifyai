@@ -2,8 +2,9 @@ import os
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from dotenv import load_dotenv
 
-# Tokenni .env fayldan o‘qiydi
+load_dotenv()  # <-- bu .env faylni o‘qiydi
 BOT_TOKEN = os.getenv("8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salom! Menga Instagram link yuboring 👇")
