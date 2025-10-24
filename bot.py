@@ -3,13 +3,17 @@ import instaloader
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98" # tokeningizni shu yerga yozing
+# 🔹 Tokeningizni shu yerga yozing
+BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
+
+# 🔹 Instagram login ma’lumotlaringizni yozing
+IG_USERNAME = "savifyai"
+IG_PASSWORD = "200502saxx"
 
 # /start komandasi
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Salom! Men Instaloader botman.\n"
-        "📸 Menga Instagram post yoki reel link yuboring — men uni yuklab beraman!"
+        "👋 Salom! Menga Instagram post yoki reel link yuboring — men uni yuklab beraman!"
     )
 
 # Yuklab olish funksiyasi
@@ -23,35 +27,30 @@ async def download_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("⏳ Yuklanmoqda... biroz kuting.")
 
     try:
+        os.makedirs("downloads", exist_ok=True)
+
         loader = instaloader.Instaloader(dirname_pattern="downloads", save_metadata=False)
-        shortcode = url.split("/")[-2]  # masalan: https://www.instagram.com/reel/XXXX/ → 'XXXX'
+        loader.login(IG_USERNAME, IG_PASSWORD)  # 🔐 Instagram login
 
+        shortcode = url.split("/")[-2]
         post = instaloader.Post.from_shortcode(loader.context, shortcode)
-        file_path = f"downloads/{shortcode}"
 
-        if post.is_video:
-            loader.download_post(post, target=file_path)
-            video_file = None
-            # yuklangan faylni topish
-            for file in os.listdir(file_path):
-                if file.endswith(".mp4"):
-                    video_file = os.path.join(file_path, file)
-                    break
-            if video_file:
-                await update.message.reply_video(video=open(video_file, "rb"), caption="🎬 Video yuklandi!")
-            else:
-                await update.message.reply_text("⚠️ Video topilmadi.")
+        target_folder = os.path.join("downloads", shortcode)
+        os.makedirs(target_folder, exist_ok=True)
+
+        loader.download_post(post, target=target_folder)
+
+        # Fayllarni tekshirish
+        media_files = [os.path.join(target_folder, f) for f in os.listdir(target_folder)]
+        image_files = [f for f in media_files if f.endswith(".jpg")]
+        video_files = [f for f in media_files if f.endswith(".mp4")]
+
+        if video_files:
+            await update.message.reply_video(video=open(video_files[0], "rb"), caption="🎬 Video yuklandi!")
+        elif image_files:
+            await update.message.reply_photo(photo=open(image_files[0], "rb"), caption="🖼 Rasm yuklandi!")
         else:
-            loader.download_post(post, target=file_path)
-            image_file = None
-            for file in os.listdir(file_path):
-                if file.endswith(".jpg"):
-                    image_file = os.path.join(file_path, file)
-                    break
-            if image_file:
-                await update.message.reply_photo(photo=open(image_file, "rb"), caption="🖼 Rasm yuklandi!")
-            else:
-                await update.message.reply_text("⚠️ Rasm topilmadi.")
+            await update.message.reply_text("⚠️ Fayl topilmadi, lekin bu post private yoki story bo‘lishi mumkin.")
 
     except Exception as e:
         await update.message.reply_text(f"❌ Xatolik: {e}")
