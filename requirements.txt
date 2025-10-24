@@ -1,5 +1,5 @@
-python-telegram-bot
+python-telegram-bot==20.7
 instaloader
 yt-dlp
-acrcloud-sdk
 ffmpeg-python
+git+https://github.com/acrcloud/acrcloud_sdk_python
