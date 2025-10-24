@@ -12,8 +12,8 @@ TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
 
 # !! (RECOMMENDED) ADD YOUR INSTAGRAM USERNAME AND PASSWORD !!
 # This is crucial for reliability.
-INSTA_USERNAME = "your_insta_username" 
-INSTA_PASSWORD = "your_insta_password"
+INSTA_USERNAME = "savifyai" 
+INSTA_PASSWORD = "200502saxx"
 
 # Enable logging
 logging.basicConfig(
