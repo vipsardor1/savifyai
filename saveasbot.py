@@ -18,11 +18,26 @@ BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
 # (Рекомендуется) Имя пользователя вашего Instagram-аккаунта
 INSTA_USERNAME = os.environ.get("INSTA_USERNAME", "savifyai") # Используйте ваш логин
 
+def create_cookie_file():
+    """Reads the cookie data from env and writes it to a file."""
+    cookie_data = os.environ.get('INSTA_COOKIE_DATA')
+    cookie_file_path = "instagram_cookie.txt"
+
+    if cookie_data:
+        try:
+            with open(cookie_file_path, "w", encoding="utf-8") as f:
+                f.write(cookie_data)
+            log.info("Instagram cookie file created successfully from env variable.")
+        except Exception as e:
+            log.error(f"Failed to write cookie file: {e}")
+    else:
+        # This is the warning you are seeing now
+        log.warning("INSTA_COOKIE_DATA not set. Cookie file not created.")
 app = Client("saveasbot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # --- Сообщения ---
 MSG_START = "Отправьте ссылку на пост Instagram, TikTok или Pinterest. Я извлеку фото, видео, сторис или текст за пару секунд!"
-MSG_PROCESSING = "Обработка... ⏳"
+MSG_PROCESSING = "⏳"
 MSG_ERROR_DEFAULT = "Ошибка: Не удалось скачать. Проверьте ссылку или попробуйте другую."
 
 # --- Regex для ссылок ---
