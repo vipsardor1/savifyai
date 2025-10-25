@@ -8,8 +8,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the bot code
-COPY saveasbot.py .
 
 # Create temp_downloads directory (used by bot)
 RUN mkdir -p /app/temp_downloads
