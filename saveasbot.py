@@ -73,7 +73,7 @@ async def extract_content(url: str, message: Message):
             pass
 
     # 2. Основной метод скачивания (yt-dlp)
-    log.info(f"[{message.message_id}] Запрос к yt-dlp")
+    log.info(f"[{message.id}] Запрос к yt-dlp")
     ydl_opts = {
         'outtmpl': os.path.join(temp_dir, '%(id)s.%(ext)s'),
         'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
