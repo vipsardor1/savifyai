@@ -83,31 +83,16 @@ async def extract_content(url: str, message: Message):
     }
 
     try:
+       with YoutubeDL(ydl_opts) as ydl: info = ydl.extract_info(url, download=True) file_path = ydl.prepare_filename(info) caption = info.get('description') or info.get('title') or "" 
         
-        with YoutubeDL(ydl_opts) as ydl:
-    info = ydl.extract_info(url, download=True)
-    caption = info.get('description') or info.get('title') or ""
-
-    # Fayl nomini topamiz
-    temp_files = os.listdir(temp_dir)
-    if not temp_files:
-        raise Exception("Файл не найден после скачивания (temp_downloads bo‘sh).")
-
-    # eng katta faylni tanlaymiz (ko‘p hollarda video yoki rasm shu bo‘ladi)
-    file_path = max(
-        [os.path.join(temp_dir, f) for f in temp_files],
-        key=lambda f: os.path.getsize(os.path.join(temp_dir, f))
-    )
-
-    # fayl kengaytmasini aniqlaymiz
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext in ['.mp4', '.mov', '.mkv', '.webm']:
-        await message.reply_video(file_path, caption=caption[:1024], supports_streaming=True)
-    else:
-        await message.reply_photo(file_path, caption=caption[:1024])
-        
-            return True # Успех
-
+        if not os.path.exists(file_path): # yt-dlp иногда сохраняет с другим расширением (напр. .mp4 вместо .webm) 
+        found_files = [f for f in os.listdir(temp_dir) if f.startswith(info.get('id'))] 
+            if not found_files: raise Exception("Файл не найден после скачивания.") file_path = os.path.join(temp_dir, found_files[0]) 
+            
+            if info.get('is_video') or info.get('duration'): await message.reply_video(file_path, caption=caption[:1024], supports_streaming=True) 
+                else: 
+                    await message.reply_photo(file_path, caption=caption[:1024]) 
+                    return True
     except Exception as e:
         log.error(f"[{message.id}] Ошибка yt-dlp: {e}")
         # ВОТ ГЛАВНОЕ ИЗМЕНЕНИЕ: Отправляем ошибку пользователю
