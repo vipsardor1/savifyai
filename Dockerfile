@@ -18,4 +18,4 @@ ENV API_HASH=""
 ENV BOT_TOKEN=""
 
 # Run the bot
-CMD ["python", "saveasbot.py"]
+CMD ["python", "bot.py"]
