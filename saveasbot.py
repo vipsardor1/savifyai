@@ -1,3 +1,4 @@
+from pyrogram.enums import ParseMode
 import os
 import re
 import logging
@@ -14,6 +15,7 @@ log = logging.getLogger(__name__)
 API_ID = "10107848"
 API_HASH = "338de3a186b820d9ec9e73b5ef747501"
 BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"
+INSTA_USERNAME = "savifyai"
 
 # (Рекомендуется) Имя пользователя вашего Instagram-аккаунта
 INSTA_USERNAME = os.environ.get("INSTA_USERNAME", "savifyai") # Используйте ваш логин
@@ -68,24 +70,6 @@ except Exception as e:
 async def extract_content(url: str, message: Message):
     temp_dir = f"temp_downloads/{message.id}"
     os.makedirs(temp_dir, exist_ok=True)
-    
-    # 1. Попытка скачать сторис через Instaloader
-    if "instagram.com/stories" in url:
-        log.info(f"[{message.id}] Запрос к Instaloader (Stories)")
-        try:
-            parts = url.split('/')
-            story_id = int(parts[-1].rstrip('/') if parts[-1] else parts[-2])
-            
-            # Instaloader не может скачать по ID, нужен username. Это ограничение.
-            # Эта логика НЕ будет работать для ссылок на сторис, т.к. нужен логин.
-            # Оставляем как заглушку, но основной метод - yt-dlp
-            log.warning("Скачивание сторис по ID через Instaloader очень ненадежно без логина.")
-            raise Exception("Логика Instaloader для сторис отключена, используется yt-dlp")
-
-        except Exception as e:
-            log.error(f"[{message.message_id}] Ошибка Instaloader: {e}")
-            # ВАЖНО: Не возвращаем False, а даем yt-dlp попробовать
-            pass
 
     # 2. Основной метод скачивания (yt-dlp)
     log.info(f"[{message.id}] Запрос к yt-dlp")
@@ -119,7 +103,7 @@ async def extract_content(url: str, message: Message):
             return True # Успех
 
     except Exception as e:
-        log.error(f"[{message.message_id}] Ошибка yt-dlp: {e}")
+        log.error(f"[{message.id}] Ошибка yt-dlp: {e}")
         # ВОТ ГЛАВНОЕ ИЗМЕНЕНИЕ: Отправляем ошибку пользователю
         error_text = str(e)
         if "login required" in error_text.lower() or "403" in error_text:
@@ -161,5 +145,6 @@ async def url_handler(client: Client, message: Message):
         pass
 
 if __name__ == "__main__":
+    create_cookie_file()
     log.info("Запуск бота...")
     app.run()
