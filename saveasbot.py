@@ -75,7 +75,7 @@ async def extract_content(url: str, message: Message):
     log.info(f"[{message.id}] Запрос к yt-dlp")
     ydl_opts = {
         'outtmpl': os.path.join(temp_dir, '%(id)s.%(ext)s'),
-        'format': 'best[height<=1080]',
+        'format': 'best',
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
