@@ -83,7 +83,7 @@ async def extract_content(url: str, message: Message):
     }
 
     try:
-       with YoutubeDL(ydl_opts) as ydl:
+        with YoutubeDL(ydl_opts) as ydl:
     info = ydl.extract_info(url, download=True)
     caption = info.get('description') or info.get('title') or ""
 
