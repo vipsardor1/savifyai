@@ -95,7 +95,8 @@ async def extract_content(url: str, message: Message):
                      raise Exception("Файл не найден после скачивания.")
                  file_path = os.path.join(temp_dir, found_files[0])
 
-            if info.get('is_video') or info.get('duration'):
+            ext = info.get('ext', '').lower()
+            if ext in ['mp4', 'mov', 'mkv', 'webm']:
                 await message.reply_video(file_path, caption=caption[:1024], supports_streaming=True)
             else:
                 await message.reply_photo(file_path, caption=caption[:1024])
