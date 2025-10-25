@@ -83,20 +83,25 @@ async def extract_content(url: str, message: Message):
     }
 
     try:
-       with YoutubeDL(ydl_opts) as ydl: info = ydl.extract_info(url, download=True) 
-           file_path = ydl.prepare_filename(info) 
-        caption = info.get('description') or info.get('title') or "" 
-        
-        if not os.path.exists(file_path): # yt-dlp иногда сохраняет с другим расширением (напр. .mp4 вместо .webm) 
-        found_files = [f for f in os.listdir(temp_dir) if f.startswith(info.get('id'))] 
-            if not found_files: 
-                raise Exception("Файл не найден после скачивания.") file_path = os.path.join(temp_dir, found_files[0]) 
+       with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+            caption = info.get('description') or info.get('title') or ""
             
+            if not os.path.exists(file_path):
+                 # yt-dlp иногда сохраняет с другим расширением (напр. .mp4 вместо .webm)
+                 found_files = [f for f in os.listdir(temp_dir) if f.startswith(info.get('id'))]
+                 if not found_files:
+                     raise Exception("Файл не найден после скачивания.")
+                 file_path = os.path.join(temp_dir, found_files[0])
+
             if info.get('is_video') or info.get('duration'):
-                await message.reply_video(file_path, caption=caption[:1024], supports_streaming=True) 
-                else: 
-                    await message.reply_photo(file_path, caption=caption[:1024]) 
-                    return True
+                await message.reply_video(file_path, caption=caption[:1024], supports_streaming=True)
+            else:
+                await message.reply_photo(file_path, caption=caption[:1024])
+            
+            return True # Успех
+
     except Exception as e:
         log.error(f"[{message.id}] Ошибка yt-dlp: {e}")
         # ВОТ ГЛАВНОЕ ИЗМЕНЕНИЕ: Отправляем ошибку пользователю
