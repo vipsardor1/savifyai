@@ -9,7 +9,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the bot code
-COPY saveas_clone.py .
+COPY saveasbot.py .
 
 # Create temp_downloads directory (used by bot)
 RUN mkdir -p /app/temp_downloads
@@ -20,4 +20,4 @@ ENV API_HASH=""
 ENV BOT_TOKEN=""
 
 # Run the bot
-CMD ["python", "saveas_clone.py"]
+CMD ["python", "saveasbot.py"]
