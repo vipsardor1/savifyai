@@ -1,15 +1,23 @@
-FROM python:3.10-slim
+# Use lightweight Python base image
+FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
-COPY . /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata \
- && rm -rf /var/lib/apt/lists/*
-RUN apt-get update && apt-get install -y git ffmpeg
-
+# Copy requirements and install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "main.py"]
+# Copy the bot code
+COPY saveas_clone.py .
 
-RUN apt-get update && apt-get install -y git ffmpeg
+# Create temp_downloads directory (used by bot)
+RUN mkdir -p /app/temp_downloads
+
+# Environment variables (set at runtime or via docker-compose)
+ENV API_ID=""
+ENV API_HASH=""
+ENV BOT_TOKEN=""
+
+# Run the bot
+CMD ["python", "saveas_clone.py"]
