@@ -1,206 +1,112 @@
 import os
-import logging
 import re
-import shutil
-from telegram import Update, InputMediaPhoto, InputMediaVideo
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import instaloader
+import logging
+from pyrogram import Client, filters
+from pyrogram.types import Message
+from yt_dlp import YoutubeDL
+from instaloader import Instaloader, Profile, Story, Post
+import asyncio
 
-# --- CONFIGURATION ---
-# !! REPLACE WITH YOUR TELEGRAM BOT TOKEN !!
-TELEGRAM_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98" 
+# Configure logging (minimal, like original)
+logging.basicConfig(level=logging.WARNING)
 
-# !! (RECOMMENDED) ADD YOUR INSTAGRAM USERNAME AND PASSWORD !!
-# This is crucial for reliability.
-INSTA_USERNAME = "savifyai" 
-INSTA_PASSWORD = "200502saxx"
+# Bot config (use env vars for security)
+API_ID = int "10107848"  # From my.telegram.org
+API_HASH = "338de3a186b820d9ec9e73b5ef747501"
+BOT_TOKEN = "8322910331:AAGqv-tApne2dppAfLv2-DN62wEsCwzqM98"  # From @BotFather
 
-# Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+app = Client("saveas_clone", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# --- INSTALOADER SETUP ---
-L = instaloader.Instaloader(
-    download_videos=True,
-    download_video_thumbnails=False,
-    download_geotags=False,
-    download_comments=False,
-    save_metadata=False,
-    compress_json=False,
-    post_metadata_txt_pattern="",
-    max_connection_attempts=1,
-)
+# Russian messages for exact match
+MSG_START = "Отправьте ссылку на пост Instagram, TikTok или Pinterest. Я извлеку фото, видео, сторис или текст за пару секунд!"
+MSG_PROCESSING = "Обработка... ⏳"
+MSG_ERROR = "Ошибка: Не удалось скачать. Проверьте ссылку или попробуйте другую."
 
-# Try to log in to Instagram
-try:
-    L.login(INSTA_USERNAME, INSTA_PASSWORD)
-    logger.info(f"Successfully logged in to Instagram as {INSTA_USERNAME}")
-except Exception as e:
-    logger.warning(f"Could not log in to Instagram: {e}. Bot will run unauthenticated.")
-    logger.warning("Expect errors and rate-limiting!")
+# URL patterns for platforms (exact to @SaveAsBot)
+URL_PATTERNS = [
+    r"https?://(?:www\.)?instagram\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?",  # Posts, Reels, IGTV
+    r"https?://(?:www\.)?instagram\.com/stories/[A-Za-z0-9_.]+/\d+/?",   # Stories
+    r"https?://(?:www\.)?tiktok\.com/@[A-Za-z0-9_.]+/video/\d+/?",       # TikTok videos
+    r"https?://(?:www\.)?pinterest\.com/pin/\d+/?",                       # Pinterest pins
+]
 
+# Combined regex for filtering
+URL_REGEX = '|'.join(URL_PATTERNS)
 
-# --- BOT HANDLERS ---
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a welcome message when the /start command is issued."""
-    await update.message.reply_text(
-        "Hi! I'm an Instagram downloader bot. 📸\n\n"
-        "Send me a link to an Instagram post, and I'll download it for you.\n\n"
-        "**Commands:**\n"
-        "➤ `/post <url>` - Downloads a single post.\n"
-        "➤ `/profile <username>` - Gets profile info and pic.\n\n"
-        "Just sending a post URL will also work!"
-    )
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends the help message."""
-    await start_command(update, context) # Just re-use the start message
-
-async def get_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Fetches and sends profile information."""
-    if not context.args:
-        await update.message.reply_text("Please provide a username.\nUsage: `/profile <username>`")
-        return
-
-    username = context.args[0]
-    await update.message.reply_text(f"Fetching profile for *{username}*...", parse_mode='Markdown')
-
-    try:
-        profile = instaloader.Profile.from_username(L.context, username)
-        
-        caption = (
-            f"👤 *{profile.full_name}* (@{profile.username})\n"
-            f"bio: _{profile.biography}_\n\n"
-            f"★ *{profile.followers}* followers\n"
-            f"★ *{profile.followees}* following\n"
-            f"★ *{profile.mediacount}* posts\n"
-            f"🔗 {profile.external_url}"
-        )
-        
-        # Send profile pic and caption
-        await update.message.reply_photo(
-            photo=profile.get_profile_pic_url(),
-            caption=caption,
-            parse_mode='Markdown'
-        )
-
-    except Exception as e:
-        logger.error(f"Error fetching profile {username}: {e}")
-        await update.message.reply_text(f"Could not fetch profile '{username}'. Is it correct and public?")
-
-
-def extract_shortcode(url: str) -> str | None:
-    """Extracts the post shortcode from various Instagram URL formats."""
-    match = re.search(r"/(p|reel|tv)/([A-Za-z0-9-_]+)", url)
-    if match:
-        return match.group(2)
-    return None
-
-async def download_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Downloads and sends a single Instagram post."""
-    url = ""
-    if context.args:
-        # Came from /post command
-        url = context.args[0]
-    elif update.message.text:
-        # Came from a plain text message
-        url = update.message.text
-        
-    shortcode = extract_shortcode(url)
-
-    if not shortcode:
-        await update.message.reply_text("That doesn't look like a valid Instagram post URL. 🤔")
-        return
-
-    await update.message.reply_text("Got it! Downloading post...")
+# Download function (core logic, optimized for speed)
+async def extract_content(url: str, message: Message):
+    os.makedirs("temp_downloads", exist_ok=True)
     
-    # Create a temporary directory to download into
-    # This keeps downloads from different users separate
-    download_dir = f"temp_{shortcode}"
-
+    # yt-dlp options (high quality, no playlist, fast)
+    ydl_opts = {
+        'outtmpl': 'temp_downloads/%(id)s.%(ext)s',
+        'format': 'best[height<=1080]',  # Balances quality/size for Telegram
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+    }
+    
+    # Special handling for Instagram stories (use instaloader for precision)
+    if "instagram.com/stories" in url:
+        try:
+            L = Instaloader(download_video_thumbnails=False, download_geotags=False)
+            # Extract username and story ID from URL
+            parts = url.split('/')
+            username = parts[-2] if parts[-2] != 'stories' else parts[-3]
+            story_id = int(parts[-1])
+            
+            profile = Profile.from_username(L.context, username)
+            for story in profile.get_stories():
+                for item in story.get_items():
+                    if item.date_utc.timestamp() >= (story_id / 1000):  # Approximate match
+                        file_path = f"temp_downloads/{username}_story_{item.date_utc}.jpg"
+                        L.download_storyitem(item, f"temp_downloads")
+                        await message.reply_photo(file_path, caption="Сторис извлечена!")
+                        os.remove(file_path)
+                        return
+        except Exception:
+            pass  # Fallback to yt-dlp
+    
+    # Fallback: yt-dlp for all (handles posts, Reels, IGTV, TikTok, Pinterest)
     try:
-        # Get post object
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
-
-        # Download the post
-        L.download_post(post, target=download_dir)
-        
-        media_files = []
-        media_group = []
-        
-        # Find the downloaded files (images and videos)
-        for filename in os.listdir(download_dir):
-            if filename.endswith(('.jpg', '.jpeg', '.png')):
-                path = os.path.join(download_dir, filename)
-                media_files.append(path)
-                media_group.append(InputMediaPhoto(media=open(path, 'rb')))
-            elif filename.endswith('.mp4'):
-                path = os.path.join(download_dir, filename)
-                media_files.append(path)
-                media_group.append(InputMediaVideo(media=open(path, 'rb')))
-
-        if not media_files:
-            await update.message.reply_text("Could not find any media in that post.")
-            return
-
-        # Send the media
-        if len(media_group) == 1:
-            # Send single photo or video
-            if media_files[0].endswith('.mp4'):
-                await update.message.reply_video(video=open(media_files[0], 'rb'), caption=post.caption)
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+            
+            # Determine media type and extract text if present
+            is_video = info.get('duration') is not None
+            text_caption = info.get('description') or info.get('title') or ""
+            
+            # Send as file for max quality (like @SaveAsBot)
+            if is_video:
+                await message.reply_video(file_path, caption=text_caption[:1024], supports_streaming=True)
             else:
-                await update.message.reply_photo(photo=open(media_files[0], 'rb'), caption=post.caption)
-        else:
-            # Send as an album (media group)
-            # Add caption to the first item only
-            media_group[0].caption = post.caption
-            await update.message.reply_media_group(media=media_group)
-
+                await message.reply_photo(file_path, caption=text_caption[:1024])
+            
+            # Cleanup
+            os.remove(file_path)
+            return True
     except Exception as e:
-        logger.error(f"Error downloading post {shortcode}: {e}")
-        await update.message.reply_text(f"Sorry, I couldn't download that post. Is the account private or is the post deleted?")
+        logging.error(f"Download error: {e}")
+        return False
+
+# /start handler (optional, like original)
+@app.on_message(filters.command("start") & filters.private)
+async def start_handler(client: Client, message: Message):
+    await message.reply(MSG_START)
+
+# Main URL handler (triggers on any matching link, exact behavior)
+@app.on_message(filters.private & filters.text & filters.regex(URL_REGEX))
+async def url_handler(client: Client, message: Message):
+    url = message.text.strip()
+    await message.reply(MSG_PROCESSING)
     
-    finally:
-        # --- CRITICAL: Clean up the downloaded files ---
-        if os.path.exists(download_dir):
-            shutil.rmtree(download_dir)
-            logger.info(f"Cleaned up directory: {download_dir}")
+    success = await extract_content(url, message)
+    if not success:
+        await message.reply(MSG_ERROR)
 
-
-def main():
-    """Start the bot."""
-    
-    # Make sure token is set
-    if TELEGRAM_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        logger.error("!!! BOT TOKEN IS NOT SET. Please edit the bot.py file. !!!")
-        return
-        
-    logger.info("Starting bot...")
-    
-    # Create the Application
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-
-    # --- Register Handlers ---
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("profile", get_profile))
-    application.add_handler(CommandHandler("post", download_post))
-
-    # Add a handler for plain text messages containing Instagram URLs
-    application.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND & (filters.Regex(r"instagram.com/(p|reel|tv)/")), 
-            download_post
-        )
-    )
-
-    # Run the bot until you press Ctrl-C
-    logger.info("Bot is running. Press Ctrl-C to stop.")
-    application.run_polling()
-
-
+# Run the bot
 if __name__ == "__main__":
-    main()
+    print("Запуск бота... (Starting bot...)")
+    app.run()
