@@ -1,5 +1,4 @@
-python-telegram-bot==20.7
-instaloader
-yt-dlp
-ffmpeg-python
-git+https://github.com/acrcloud/acrcloud_sdk_python
+pyrogram==2.0.106
+tgcrypto==1.2.5
+yt-dlp==2023.10.13
+instaloader==4.13.2
