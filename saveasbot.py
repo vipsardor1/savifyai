@@ -38,7 +38,7 @@ def create_cookie_file():
 app = Client("saveasbot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # --- Сообщения ---
-MSG_START = "Отправьте ссылку на пост Instagram, TikTok или Pinterest. Я извлеку фото, видео, сторис или текст за пару секунд!"
+MSG_START = "Send a link to an Instagram, TikTok, or Pinterest post. I will extract the photo, video, story, or text in a few seconds!"
 MSG_PROCESSING = "⏳"
 MSG_ERROR_DEFAULT = "Ошибка: Не удалось скачать. Проверьте ссылку или попробуйте другую."
 
@@ -111,7 +111,7 @@ async def extract_content(url: str, message: Message):
         elif "429" in error_text or "rate limit" in error_text:
              await message.reply("Ошибка: Слишком много запросов. Instagram/TikTok временно заблокировал меня. Попробуйте позже.")
         else:
-             await message.reply(f"Ошибка: Не удалось скачать.\n\n`{error_text[:200]}...`") # Показываем ошибку
+             await message.reply(f"Error: Failed to download.\n\n`{error_text[:200]}...`")
         return False # Неудача
 
     finally:
