@@ -83,7 +83,8 @@ async def extract_content(url: str, message: Message):
     }
 
     try:
-       with YoutubeDL(ydl_opts) as ydl: info = ydl.extract_info(url, download=True) file_path = ydl.prepare_filename(info) caption = info.get('description') or info.get('title') or "" 
+       with YoutubeDL(ydl_opts) as ydl: info = ydl.extract_info(url, download=True) 
+           file_path = ydl.prepare_filename(info) caption = info.get('description') or info.get('title') or "" 
         
         if not os.path.exists(file_path): # yt-dlp иногда сохраняет с другим расширением (напр. .mp4 вместо .webm) 
         found_files = [f for f in os.listdir(temp_dir) if f.startswith(info.get('id'))] 
