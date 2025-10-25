@@ -51,12 +51,12 @@ except Exception as e:
 # --- Логика бота ---
 
 async def extract_content(url: str, message: Message):
-    temp_dir = f"temp_downloads/{message.message_id}"
+    temp_dir = f"temp_downloads/{message.id}"
     os.makedirs(temp_dir, exist_ok=True)
     
     # 1. Попытка скачать сторис через Instaloader
     if "instagram.com/stories" in url:
-        log.info(f"[{message.message_id}] Запрос к Instaloader (Stories)")
+        log.info(f"[{message.id}] Запрос к Instaloader (Stories)")
         try:
             parts = url.split('/')
             story_id = int(parts[-1].rstrip('/') if parts[-1] else parts[-2])
